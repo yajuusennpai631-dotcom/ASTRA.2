@@ -1,0 +1,17 @@
+import discord
+from discord.ext import commands
+from discord import app_commands
+
+class General(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    # スラッシュコマンドの定義
+    @app_commands.command(name="ping", description="ボットの応答速度をテストします")
+    async def ping(self, interaction: discord.Interaction):
+        latency = round(self.bot.latency * 1000)
+        await interaction.response.send_message(f"Pong! 応答速度: {latency}ms")
+
+# コグをボットに読み込ませるためのおまじない
+async def setup(bot):
+    await bot.add_cog(General(bot))
