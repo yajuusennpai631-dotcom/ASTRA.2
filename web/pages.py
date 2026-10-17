@@ -174,11 +174,16 @@ p.sub{font-size:14px;color:var(--mut);margin:8px 0 0}
 .sec h2{font-size:14px;font-weight:800;color:#4c6079;margin:0}
 .list{display:grid;gap:12px}
 .guild{padding:18px 20px}
+.guild-link{display:block;color:inherit;transition:border-color .15s,box-shadow .15s,transform .15s}
+.guild-link:hover{border-color:#b8cafa;box-shadow:0 5px 18px rgba(37,92,208,.08);transform:translateY(-1px)}
+.guild-link:focus-visible{outline:3px solid rgba(37,92,208,.35);outline-offset:3px}
 .guild .top{display:flex;align-items:center;gap:12px;min-width:0}
+.guild-arrow{font-size:28px;line-height:1;color:var(--mut2);padding:0 8px}
 .avatar{width:48px;height:48px;flex:none;border-radius:12px;background:#eaf0fb;color:var(--ac);display:grid;place-items:center;font-weight:800;font-size:14px;object-fit:cover}
 .guild h3{margin:0;font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .guild .meta{margin:2px 0 0;font-size:12px;color:var(--mut2)}
 .badge{display:inline-block;padding:1px 8px;border-radius:99px;background:var(--ac-l);color:var(--ac);font-size:11px;font-weight:700;margin-right:6px}
+.badge.muted{background:#f0f2f5;color:var(--sub)}
 form.inline{display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid #e9eef5}
 input[type=text],input[type=password]{flex:1;min-width:0;padding:12px 16px;border:1px solid #dce4ef;border-radius:12px;background:#fbfcfe;color:var(--fg);font:inherit;font-size:14px;outline:none}
 input:focus{border-color:var(--ac)}
@@ -199,6 +204,9 @@ button.full{width:100%;padding:14px;border-radius:10px}
 .note{margin-top:32px;font-size:12px;line-height:1.8;color:var(--mut2)}
 .back{display:block;text-align:center;margin-top:24px;font-size:12px;font-weight:700;color:var(--mut2)}
 .back:hover{color:var(--ac)}
+.back-link{display:inline-block;margin:0 0 20px;font-size:13px;font-weight:700;color:var(--sub)}
+.back-link:hover{color:var(--ac)}
+.detail-head{margin-bottom:24px}
 .meta code{background:none;padding:0;color:var(--mut2)}
 code{font-size:.85em;background:#eef2f8;padding:2px 6px;border-radius:6px;color:var(--sub)}
 footer.bot{border-top:1px solid #e5ebf2;background:#fff;padding:28px 24px}
@@ -396,36 +404,84 @@ async def dashboard(request: Request, msg: str = "", error: str = ""):
     cards = ""
     for g in sorted(guilds, key=lambda x: x["name"].lower()):
         name = html.escape(g["name"])
+        gid = quote(g["id"], safe="")
         icon = (f'<img class="avatar" src="https://cdn.discordapp.com/icons/{g["id"]}/{g["icon"]}.png?size=96" alt="">'
                 if g.get("icon") else f'<div class="avatar">{html.escape("".join(w[0] for w in g["name"].split()[:2]).upper() or "?")}</div>')
         live = bot.get_guild(int(g["id"]))
         if live:
             nick = html.escape(live.me.nick or "") if live.me else ""
-            cards += f"""<article class="card guild"><div class="top">{icon}
-<div style="min-width:0"><h3>{name}</h3>
-<p class="meta"><span class="badge">Bot導入済み</span>{html.escape(nick) if nick else "ニックネーム未設定"}</p></div></div>
-<form method="post" action="/nickname" class="inline">
-<input type="hidden" name="guild_id" value="{g['id']}">
-<input type="text" name="nickname" value="{nick}" maxlength="32" placeholder="サーバー内ニックネーム（空欄で既定に戻す）">
-<button type="submit">変更を保存</button></form></article>"""
+            status = '<span class="badge">Bot導入済み</span>'
         else:
-            cards += f"""<article class="card guild"><div class="row"><div class="top">{icon}
-<div style="min-width:0"><h3>{name}</h3><p class="meta">Bot未導入</p></div></div>
-<a class="btn" target="_blank" rel="noreferrer" href="https://discord.com/oauth2/authorize?client_id={cid}&scope=bot&permissions=8&guild_id={g['id']}">Botを追加 ↗</a></div></article>"""
+            nick = ""
+            status = '<span class="badge muted">Bot未導入</span>'
+        cards += f"""<a class="card guild guild-link" href="/guild/{gid}"><div class="row"><div class="top">{icon}
+<div style="min-width:0"><h3>{name}</h3>
+<p class="meta">{status}{html.escape(nick) if nick else ("ニックネーム未設定" if live else "設定を開く")}</p></div></div>
+<span class="guild-arrow" aria-hidden="true">›</span></div></a>"""
     if not cards:
         cards = '<div class="empty">管理可能なサーバーが見つかりませんでした。</div>'
     note = f'<div class="msg">{html.escape(msg)}</div>' if msg else ""
     return _page("サーバー管理 | ASTRA", f"""
 <div class="head"><div>
 <div class="eyebrow">{_STAR}<span>SERVER DASHBOARD</span></div>
-<h1>サーバー管理</h1>
-<p class="sub">Discordサーバーに導入されたASTRA Botの設定を管理できます。</p></div>
+<h1>サーバーを選択</h1>
+<p class="sub">管理するDiscordサーバーを選んでください。</p></div>
 <div class="user">{_avatar(sess)}<span>{html.escape(sess['name'] or '')}</span>
 <form method="post" action="/auth/dashboard/logout"><button class="ghost" type="submit">ログアウト</button></form></div></div>
 {note}
 <div class="sec"><h2>管理可能なサーバー</h2></div>
 <div class="list">{cards}</div>
-<p class="note">ニックネーム変更にはBotがサーバーに導入されていることと、Botにニックネーム変更の権限が必要です。</p>""", active="dashboard")
+<p class="note">サーバーを選択すると、そのサーバー専用の管理画面が開きます。</p>""", active="dashboard")
+
+
+@router.get("/guild/{guild_id}", response_class=HTMLResponse)
+async def guild_dashboard(request: Request, guild_id: int, msg: str = ""):
+    if not _configured():
+        return _setup_page()
+    sess = _session(request)
+    if not sess:
+        return RedirectResponse("/?error=expired", status_code=303)
+
+    bot = _bot()
+    if not bot or not bot.is_ready():
+        return _page("サーバー管理 | ASTRA", '<div class="msg">Botが起動中です。数秒後に再読み込みしてください。</div><a class="back-link" href="/">← サーバー選択に戻る</a>', active="dashboard")
+
+    guilds = await _manageable_guilds(sess["token"])
+    if guilds == "expired":
+        return _expired_redirect(sess)
+    if guilds is None:
+        return _page("サーバー管理 | ASTRA", '<div class="err">サーバー一覧を読み込めませんでした。しばらくしてから再読み込みしてください。</div><a class="back-link" href="/">← サーバー選択に戻る</a>', active="dashboard")
+
+    selected = next((g for g in guilds if g["id"] == str(guild_id)), None)
+    if selected is None:
+        return _page("サーバー管理 | ASTRA", '<div class="err">このサーバーを管理する権限がありません。</div><a class="back-link" href="/">← サーバー選択に戻る</a>', active="dashboard")
+
+    name = html.escape(selected["name"])
+    live = bot.get_guild(guild_id)
+    note = f'<div class="msg">{html.escape(msg)}</div>' if msg else ""
+    cid = quote(_client_id() or "")
+    if live:
+        nick = html.escape(live.me.nick or "") if live.me else ""
+        settings = f"""<section class="card pad"><div class="sec"><h2>Botのニックネーム</h2><span class="badge">Bot導入済み</span></div>
+<p class="sub">このサーバー内で表示されるASTRA Botのニックネームを設定します。</p>
+<form method="post" action="/nickname" class="inline">
+<input type="hidden" name="guild_id" value="{guild_id}">
+<input type="text" name="nickname" value="{nick}" maxlength="32" placeholder="空欄で既定の名前に戻す">
+<button type="submit">変更を保存</button></form>
+<p class="note">変更にはBotにニックネーム変更の権限が必要です。</p></section>"""
+    else:
+        settings = f"""<section class="card pad"><div class="sec"><h2>Botの設定</h2><span class="badge muted">Bot未導入</span></div>
+<p class="sub">このサーバーで設定を管理するには、先にASTRA Botを導入してください。</p>
+<p style="margin:20px 0 0"><a class="btn" target="_blank" rel="noreferrer" href="https://discord.com/oauth2/authorize?client_id={cid}&scope=bot&permissions=8&guild_id={guild_id}">このサーバーにBotを追加 ↗</a></p></section>"""
+
+    return _page(f"{name} | サーバー管理", f"""
+<a class="back-link" href="/">← サーバー選択に戻る</a>
+<div class="head detail-head"><div>
+<div class="eyebrow">{_STAR}<span>SERVER DASHBOARD</span></div>
+<h1>{name}</h1><p class="sub">サーバー別管理画面</p></div>
+<div class="user">{_avatar(sess)}<span>{html.escape(sess['name'] or '')}</span>
+<form method="post" action="/auth/dashboard/logout"><button class="ghost" type="submit">ログアウト</button></form></div></div>
+{note}{settings}""", active="dashboard")
 
 
 @router.post("/nickname")
@@ -457,4 +513,6 @@ async def set_nickname(request: Request):
             result = "権限がありません（BotにNicknameの変更権限が必要です）。"
         except (discord.HTTPException, ValueError):
             pass
+    if guilds and guilds != "expired" and any(g["id"] == gid for g in guilds):
+        return RedirectResponse(f"/guild/{gid}?msg={quote(result)}", status_code=303)
     return RedirectResponse(f"/?msg={quote(result)}", status_code=303)
