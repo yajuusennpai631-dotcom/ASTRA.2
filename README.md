@@ -5,8 +5,8 @@
 | 機能 | URL / 場所 |
 |---|---|
 | Discord Bot（`/ping` など） | Discord 上 |
-| ウェブページ（ステータス） | `https://<your-domain>/` |
-| 管理Dashboard（ニックネーム変更など） | `https://<your-domain>/dashboard` |
+| 管理Dashboard（ニックネーム変更など） | `https://<your-domain>/` |
+| ウェブページ（ステータス） | `https://<your-domain>/status` |
 | ヘルスチェック | `/health` |
 | 外部連携API（任意） | `/internal/*`（`X-ASTRA-BOT-SECRET` で保護） |
 
@@ -25,7 +25,7 @@
    - `BOT_API_SECRET` … 外部（Cloudflare Worker等）から `/internal/*` を使う場合のみ
 4. **Settings → Networking → Generate Domain** で公開URLを発行。
 5. **Discord Developer Portal > OAuth2 > Redirects** に `https://<your-domain>/auth/dashboard/callback` を追加。
-6. 発行されたURLを開く → トップにステータス、`/dashboard` で「Discordでログイン」。
+6. 発行されたURLを開く → `/` で「Discordでログイン」、`/status` でBotのステータスを確認。
 
 ## 動作確認
 - `/health` が `{"status":"ok"}` を返す

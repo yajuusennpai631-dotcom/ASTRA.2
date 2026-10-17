@@ -1,11 +1,11 @@
 """ウェブページ（トップ）と管理Dashboard（Discord OAuth2ログイン）。
 
-- GET  /                         : 公開ステータスページ
-- GET  /dashboard                : サーバー管理（Discordログイン必須）
+- GET  /                         : サーバー管理（Discordログイン必須）
+- GET  /status                   : 公開ステータスページ
 - GET  /auth/dashboard/discord   : Discord認可画面へリダイレクト
 - GET  /auth/dashboard/callback  : OAuthコールバック
 - POST /auth/dashboard/logout
-- POST /dashboard/nickname
+- POST /nickname
 
 ASTRA-main (Cloudflare Worker) と同じ仕様:
   scope=identify guilds / 所有者または「管理者」「サーバー管理」権限を持つサーバーのみ操作可能。
@@ -220,8 +220,12 @@ ol{padding-left:20px;font-size:14px;color:var(--sub);line-height:2}
 
 def _page(title: str, body: str, active: str = "", narrow: bool = False) -> HTMLResponse:
     dash_cls = "on" if active == "dashboard" else ""
-    home_cls = "on" if active == "home" else ""
-    dash_link = f'<a href="/dashboard" class="{dash_cls}">サーバー管理</a>'
+    status_cls = "on" if active == "status" else ""
+    nav_links = (
+        f'<a href="/" class="{dash_cls}">サーバー管理</a>'
+        f'<a href="/status" class="{status_cls}">ステータス</a>'
+        '<a class="cta" href="https://astra.mrag.workers.dev/">トップページ</a>'
+    )
     page = """<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -230,7 +234,7 @@ def _page(title: str, body: str, active: str = "", narrow: bool = False) -> HTML
 <header class="top"><div class="bar">
 <a class="brand" href="/"><span class="logo">__STAR__</span>
 <span><span class="t1">ASTRA</span><span class="t2">BOT SERVICE PORTAL</span></span></a>
-<nav class="top"><a href="/" class="__HOME__">ホーム</a>__DASH__</nav>
+<nav class="top">__NAV__</nav>
 </div></header>
 <main class="__NARROW__">__BODY__</main>
 <footer class="bot"><div class="in">
@@ -239,7 +243,7 @@ def _page(title: str, body: str, active: str = "", narrow: bool = False) -> HTML
 </body></html>"""
     for k, v in {
         "__TITLE__": html.escape(title), "__CSS__": _CSS, "__STAR__": _STAR,
-        "__HOME__": home_cls, "__DASH__": dash_link,
+        "__NAV__": nav_links,
         "__NARROW__": "narrow" if narrow else "", "__BODY__": body,
     }.items():
         page = page.replace(k, v)
@@ -247,8 +251,8 @@ def _page(title: str, body: str, active: str = "", narrow: bool = False) -> HTML
 
 
 # ---------- 公開ページ ----------
-@router.get("/", response_class=HTMLResponse)
-async def index():
+@router.get("/status", response_class=HTMLResponse)
+async def status():
     bot = _bot()
     ready = bool(bot and bot.is_ready())
     name = html.escape(str(bot.user)) if ready and bot.user else "—"
@@ -265,7 +269,7 @@ async def index():
 <div class="card stat"><div class="k">応答速度</div><div class="v">{ping}</div></div></div>
 <div class="card pad"><span style="font-size:12px;font-weight:700;color:var(--mut2)">ログイン中のBot</span>
 <div style="font-weight:800;margin-top:4px">{name}</div></div>
-<p class="note"><a href="/dashboard">サーバー管理Dashboardへ →</a></p>""", active="home")
+<p class="note"><a href="/">サーバー管理Dashboardへ →</a></p>""", active="status")
 
 
 # ---------- ログイン ----------
@@ -298,7 +302,7 @@ def _setup_page() -> HTMLResponse:
 @router.get("/auth/dashboard/discord")
 async def oauth_start(request: Request):
     if not _configured():
-        return RedirectResponse("/dashboard", status_code=303)
+        return RedirectResponse("/", status_code=303)
     state = secrets.token_urlsafe(24)
     url = "https://discord.com/oauth2/authorize?" + urlencode({
         "client_id": _client_id(), "response_type": "code",
@@ -313,7 +317,7 @@ async def oauth_start(request: Request):
 
 @router.get("/auth/dashboard/callback")
 async def oauth_callback(request: Request, code: str = "", state: str = ""):
-    fail = RedirectResponse("/dashboard?error=oauth", status_code=303)
+    fail = RedirectResponse("/?error=oauth", status_code=303)
     expected = request.cookies.get(STATE_COOKIE)
     fail.delete_cookie(STATE_COOKIE, path="/auth/dashboard")
     if not _configured() or not code or not state or not expected or not hmac.compare_digest(state, expected):
@@ -344,7 +348,7 @@ async def oauth_callback(request: Request, code: str = "", state: str = ""):
     sid = secrets.token_urlsafe(32)
     _sessions[sid] = {"uid": user["id"], "name": user.get("global_name") or user.get("username"),
                       "avatar": user.get("avatar"), "token": access, "exp": now + ttl}
-    resp = RedirectResponse("/dashboard", status_code=303)
+    resp = RedirectResponse("/", status_code=303)
     resp.delete_cookie(STATE_COOKIE, path="/auth/dashboard")
     resp.set_cookie(SESSION_COOKIE, f"{sid}.{_sign(sid)}", httponly=True, samesite="lax",
                     secure=_secure(request), max_age=ttl, path="/")
@@ -356,20 +360,20 @@ async def logout(request: Request):
     sess = _session(request)
     if sess:
         _sessions.pop(sess["sid"], None)
-    resp = RedirectResponse("/dashboard", status_code=303)
+    resp = RedirectResponse("/", status_code=303)
     resp.delete_cookie(SESSION_COOKIE, path="/")
     return resp
 
 
 def _expired_redirect(sess: dict) -> RedirectResponse:
     _sessions.pop(sess["sid"], None)
-    resp = RedirectResponse("/dashboard?error=expired", status_code=303)
+    resp = RedirectResponse("/?error=expired", status_code=303)
     resp.delete_cookie(SESSION_COOKIE, path="/")
     return resp
 
 
 # ---------- Dashboard ----------
-@router.get("/dashboard", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, msg: str = "", error: str = ""):
     bot = _bot()
     if not _configured():
@@ -400,7 +404,7 @@ async def dashboard(request: Request, msg: str = "", error: str = ""):
             cards += f"""<article class="card guild"><div class="top">{icon}
 <div style="min-width:0"><h3>{name}</h3>
 <p class="meta"><span class="badge">Bot導入済み</span>{html.escape(nick) if nick else "ニックネーム未設定"}</p></div></div>
-<form method="post" action="/dashboard/nickname" class="inline">
+<form method="post" action="/nickname" class="inline">
 <input type="hidden" name="guild_id" value="{g['id']}">
 <input type="text" name="nickname" value="{nick}" maxlength="32" placeholder="サーバー内ニックネーム（空欄で既定に戻す）">
 <button type="submit">変更を保存</button></form></article>"""
@@ -424,11 +428,11 @@ async def dashboard(request: Request, msg: str = "", error: str = ""):
 <p class="note">ニックネーム変更にはBotがサーバーに導入されていることと、Botにニックネーム変更の権限が必要です。</p>""", active="dashboard")
 
 
-@router.post("/dashboard/nickname")
+@router.post("/nickname")
 async def set_nickname(request: Request):
     sess = _session(request)
     if not sess:
-        return RedirectResponse("/dashboard", status_code=303)
+        return RedirectResponse("/", status_code=303)
     form = await _form(request)
     gid = form.get("guild_id", "")
     guilds = await _manageable_guilds(sess["token"])  # 毎回権限を再確認
@@ -453,4 +457,4 @@ async def set_nickname(request: Request):
             result = "権限がありません（BotにNicknameの変更権限が必要です）。"
         except (discord.HTTPException, ValueError):
             pass
-    return RedirectResponse(f"/dashboard?msg={quote(result)}", status_code=303)
+    return RedirectResponse(f"/?msg={quote(result)}", status_code=303)
